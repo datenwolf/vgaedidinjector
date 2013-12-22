@@ -61,11 +61,13 @@
 
 #include "avr_compiler.h"
 
+#ifndef MAPPED_EEPROM_START
 #define MAPPED_EEPROM_START 0x1000
+#endif
+
 #define EEPROM_PAGESIZE 32
 #define EEPROM(_pageAddr, _byteAddr) \
 	((uint8_t *) MAPPED_EEPROM_START)[_pageAddr*EEPROM_PAGESIZE + _byteAddr]
-
 
 
 /* Definitions of macros. */

@@ -2,7 +2,7 @@
 ## HWREV: 
 ##   0 -> initial revision
 MMCU = atxmega16a4
-DEFINES = -DF_CPU=32000000 -DHWREV=0
+DEFINES = -DF_CPU=2000000 -DHWREV=0
 
 # -b baudrate
 AVRDUDE = avrdude -P usb -c jtag3pdi -p $(MMCU)
@@ -21,7 +21,7 @@ VPATH = .
 CC = avr-gcc
 CFLAGS = -W -Wall -Os -std=gnu99 -Werror-implicit-function-declaration
 
-all: firmware.bin firmware.hex firmware-eeprom.bin
+all: firmware.bin firmware.hex
 
 run: all prg
 
@@ -66,19 +66,12 @@ program_fuses:
 prg: firmware.hex
 	$(AVRDUDE) -Uflash:w:firmware.hex:i
 
-program_bootloader:
-	$(AVRDUDE) -e -Uflash:w:bootload.hex:i
-
 dump: firmware.elf
 	avr-objdump -D firmware.elf
 
 clean:
-	-rm -f firmware.bin firmware.elf firmware-eeprom.bin firmware.hex
+	-rm -f firmware.bin firmware.elf firmware.hex
 	-rm -f *.o
-
-firmware-eeprom.bin: firmware.elf
-	avr-objcopy -j .eeprom -O binary firmware.elf firmware-eeprom.bin
-	@ls -l firmware-eeprom.bin
 
 firmware.hex: firmware.elf
 	avr-objcopy -j .text -j .data -O ihex firmware.elf firmware.hex
@@ -86,7 +79,4 @@ firmware.hex: firmware.elf
 firmware.bin: firmware.elf
 	avr-objcopy -j .text -j .data -O binary firmware.elf firmware.bin
 	@ls -l firmware.bin
-
-asm:
-	$(CC) -W -Wall -O2 -mmcu=$(MMCU) -S main.c -o main.asm
 
