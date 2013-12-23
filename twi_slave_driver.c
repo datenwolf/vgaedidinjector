@@ -79,7 +79,7 @@
  */
 void TWI_SlaveInitializeDriver(TWI_Slave_t *twi,
                                TWI_t *module,
-                               void (*processDataFunction) (void))
+                               TWI_SlaveProc processDataFunction)
 {
 	twi->interface = module;
 	twi->Process_Data = processDataFunction;
@@ -102,13 +102,18 @@ void TWI_SlaveInitializeDriver(TWI_Slave_t *twi,
  */
 void TWI_SlaveInitializeModule(TWI_Slave_t *twi,
                                uint8_t address,
-                               TWI_SLAVE_INTLVL_t intLevel)
+                               TWI_SLAVE_INTLVL_t intLevel,
+			       uint8_t *recvData,
+			       uint8_t bytesMaxRecv )
 {
+	twi->bytesMaxRecv = bytesMaxRecv;
+	twi->recvData = recvData;
+
 	twi->interface->SLAVE.CTRLA = intLevel |
 	                              TWI_SLAVE_DIEN_bm |
 	                              TWI_SLAVE_APIEN_bm |
 	                              TWI_SLAVE_ENABLE_bm;
-	twi->interface->SLAVE.ADDR = (address<<1);
+	twi->interface->SLAVE.ADDR = (address << 1);
 }
 
 
@@ -121,7 +126,12 @@ void TWI_SlaveInitializeModule(TWI_Slave_t *twi,
  */
 void TWI_SlaveInterruptHandler(TWI_Slave_t *twi)
 {
-	uint8_t currentStatus = twi->interface->SLAVE.STATUS;
+#if 1
+	PORTE.OUTSET = (1<<2);
+	PORTE.OUTCLR = (1<<2);
+#endif
+
+	uint8_t const currentStatus = twi->interface->SLAVE.STATUS;
 
 	/* If bus error. */
 	if (currentStatus & TWI_SLAVE_BUSERR_bm) {
@@ -129,30 +139,30 @@ void TWI_SlaveInterruptHandler(TWI_Slave_t *twi)
 		twi->bytesSent = 0;
 		twi->result = TWIS_RESULT_BUS_ERROR;
 		twi->status = TWIS_STATUS_READY;
-	}
+	} else
 
 	/* If transmit collision. */
-	else if (currentStatus & TWI_SLAVE_COLL_bm) {
+	if (currentStatus & TWI_SLAVE_COLL_bm) {
 		twi->bytesReceived = 0;
 		twi->bytesSent = 0;
 		twi->result = TWIS_RESULT_TRANSMIT_COLLISION;
 		twi->status = TWIS_STATUS_READY;
-	}
+	} else
 
 	/* If address match. */
-	else if ((currentStatus & TWI_SLAVE_APIF_bm) &&
+	if ((currentStatus & TWI_SLAVE_APIF_bm) &&
 	        (currentStatus & TWI_SLAVE_AP_bm)) {
 
 		TWI_SlaveAddressMatchHandler(twi);
-	}
+	} else
 
 	/* If stop (only enabled through slave read transaction). */
-	else if (currentStatus & TWI_SLAVE_APIF_bm) {
+	if (currentStatus & TWI_SLAVE_APIF_bm) {
 		TWI_SlaveStopHandler(twi);
-	}
+	} else
 
 	/* If data interrupt. */
-	else if (currentStatus & TWI_SLAVE_DIF_bm) {
+	if (currentStatus & TWI_SLAVE_DIF_bm) {
 		TWI_SlaveDataHandler(twi);
 	}
 
@@ -219,7 +229,7 @@ void TWI_SlaveStopHandler(TWI_Slave_t *twi)
  */
 void TWI_SlaveDataHandler(TWI_Slave_t *twi)
 {
-	if (twi->interface->SLAVE.STATUS & TWI_SLAVE_DIR_bm) {
+	if( twi->interface->SLAVE.STATUS & TWI_SLAVE_DIR_bm ) {
 		TWI_SlaveWriteHandler(twi);
 	} else {
 		TWI_SlaveReadHandler(twi);
@@ -235,18 +245,20 @@ void TWI_SlaveDataHandler(TWI_Slave_t *twi)
  */
 void TWI_SlaveReadHandler(TWI_Slave_t *twi)
 {
+	uint8_t const bytesMaxRecv = twi->bytesMaxRecv;
+
 	/* Enable stop interrupt. */
 	uint8_t currentCtrlA = twi->interface->SLAVE.CTRLA;
 	twi->interface->SLAVE.CTRLA = currentCtrlA | TWI_SLAVE_PIEN_bm;
 
 	/* If free space in buffer. */
-	if (twi->bytesReceived < TWIS_RECEIVE_BUFFER_SIZE) {
+	if( twi->bytesReceived < bytesMaxRecv ) {
 		/* Fetch data */
 		uint8_t data = twi->interface->SLAVE.DATA;
-		twi->receivedData[twi->bytesReceived] = data;
+		twi->recvData[twi->bytesReceived] = data;
 
 		/* Process data. */
-		twi->Process_Data();
+		twi->Process_Data(twi);
 
 		twi->bytesReceived++;
 
@@ -254,11 +266,12 @@ void TWI_SlaveReadHandler(TWI_Slave_t *twi)
 		 * complete transaction and wait for next START. Otherwise
 		 * send ACK and wait for data interrupt.
 		 */
-		if (twi->abort) {
+		if( twi->abort ) {
 			twi->interface->SLAVE.CTRLB = TWI_SLAVE_CMD_COMPTRANS_gc;
 			TWI_SlaveTransactionFinished(twi, TWIS_RESULT_ABORTED);
 			twi->abort = false;
-		} else {
+		}
+		else {
 			twi->interface->SLAVE.CTRLB = TWI_SLAVE_CMD_RESPONSE_gc;
 		}
 	}
@@ -281,6 +294,7 @@ void TWI_SlaveReadHandler(TWI_Slave_t *twi)
  */
 void TWI_SlaveWriteHandler(TWI_Slave_t *twi)
 {
+	uint8_t const bytesToSend = twi->bytesToSend;
 	/* If NACK, slave write transaction finished. */
 	if ((twi->bytesSent > 0) && (twi->interface->SLAVE.STATUS &
 	                             TWI_SLAVE_RXACK_bm)) {
@@ -290,7 +304,7 @@ void TWI_SlaveWriteHandler(TWI_Slave_t *twi)
 	}
 	/* If ACK, master expects more data. */
 	else {
-		if (twi->bytesSent < TWIS_SEND_BUFFER_SIZE) {
+		if( twi->bytesSent < bytesToSend ) {
 			uint8_t data = twi->sendData[twi->bytesSent];
 			twi->interface->SLAVE.DATA = data;
 			twi->bytesSent++;

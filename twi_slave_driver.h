@@ -77,11 +77,9 @@ typedef enum TWIS_RESULT_enum {
 	TWIS_RESULT_ABORTED            = (0x06<<0),
 } TWIS_RESULT_t;
 
-/* Buffer size defines. */
-#define TWIS_RECEIVE_BUFFER_SIZE         8
-#define TWIS_SEND_BUFFER_SIZE            8
+struct TWI_Slave;
 
-
+typedef void (*TWI_SlaveProc)(struct TWI_Slave*);
 
 /*! \brief TWI slave driver struct.
  *
@@ -89,26 +87,28 @@ typedef enum TWIS_RESULT_enum {
  *  buffers and necessary varibles.
  */
 typedef struct TWI_Slave {
-	TWI_t *interface;                               /*!< Pointer to what interface to use*/
-	void (*Process_Data) (void);                    /*!< Pointer to process data function*/
-	register8_t receivedData[TWIS_RECEIVE_BUFFER_SIZE]; /*!< Read data*/
-	register8_t sendData[TWIS_SEND_BUFFER_SIZE];        /*!< Data to write*/
-	register8_t bytesReceived;                          /*!< Number of bytes received*/
-	register8_t bytesSent;                              /*!< Number of bytes sent*/
-	register8_t status;                                 /*!< Status of transaction*/
-	register8_t result;                                 /*!< Result of transaction*/
-	bool abort;                                     /*!< Strobe to abort*/
+	TWI_t *interface;           /*!< Pointer to what interface to use*/
+	TWI_SlaveProc Process_Data; /*!< Pointer to process data function*/
+	uint8_t *recvData;
+	uint8_t const *sendData;    /*!< Data to write*/
+	uint8_t bytesMaxRecv;
+	uint8_t bytesToSend;        /*!< Number of bytes to send */
+	uint8_t bytesReceived;      /*!< Number of bytes received*/
+	uint8_t bytesSent;          /*!< Number of bytes sent*/
+	uint8_t status;             /*!< Status of transaction*/
+	uint8_t result;             /*!< Result of transaction*/
+	bool abort;                 /*!< Strobe to abort*/
 } TWI_Slave_t;
-
-
 
 void TWI_SlaveInitializeDriver(TWI_Slave_t *twi,
                                TWI_t *module,
-                               void (*processDataFunction) (void));
+                               TWI_SlaveProc processDataFunction);
 
 void TWI_SlaveInitializeModule(TWI_Slave_t *twi,
                                uint8_t address,
-                               TWI_SLAVE_INTLVL_t intLevel);
+                               TWI_SLAVE_INTLVL_t intLevel,
+			       uint8_t *recvData,
+			       uint8_t bytesMaxRecv );
 
 void TWI_SlaveInterruptHandler(TWI_Slave_t *twi);
 void TWI_SlaveAddressMatchHandler(TWI_Slave_t *twi);

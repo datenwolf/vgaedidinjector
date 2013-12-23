@@ -72,19 +72,14 @@
 
 /*! Transaction result enumeration. */
 typedef enum TWIM_RESULT_enum {
-	TWIM_RESULT_UNKNOWN          = (0x00<<0),
-	TWIM_RESULT_OK               = (0x01<<0),
-	TWIM_RESULT_BUFFER_OVERFLOW  = (0x02<<0),
-	TWIM_RESULT_ARBITRATION_LOST = (0x03<<0),
-	TWIM_RESULT_BUS_ERROR        = (0x04<<0),
-	TWIM_RESULT_NACK_RECEIVED    = (0x05<<0),
-	TWIM_RESULT_FAIL             = (0x06<<0),
+	TWIM_RESULT_UNKNOWN          ,
+	TWIM_RESULT_OK               ,
+	TWIM_RESULT_BUFFER_OVERFLOW  ,
+	TWIM_RESULT_ARBITRATION_LOST ,
+	TWIM_RESULT_BUS_ERROR        ,
+	TWIM_RESULT_NACK_RECEIVED    ,
+	TWIM_RESULT_FAIL             ,
 } TWIM_RESULT_t;
-
-/*! Buffer size defines */
-#define TWIM_WRITE_BUFFER_SIZE         8
-#define TWIM_READ_BUFFER_SIZE          8
-
 
 /*! \brief TWI master driver struct
  *
@@ -92,43 +87,47 @@ typedef enum TWIM_RESULT_enum {
  *  buffers and necessary varibles.
  */
 typedef struct TWI_Master {
-	TWI_t *interface;                  /*!< Pointer to what interface to use */
-	register8_t address;                            /*!< Slave address */
-	register8_t writeData[TWIM_WRITE_BUFFER_SIZE];  /*!< Data to write */
-	register8_t readData[TWIM_READ_BUFFER_SIZE];    /*!< Read data */
-	register8_t bytesToWrite;                       /*!< Number of bytes to write */
-	register8_t bytesToRead;                        /*!< Number of bytes to read */
-	register8_t bytesWritten;                       /*!< Number of bytes written */
-	register8_t bytesRead;                          /*!< Number of bytes read */
-	register8_t status;                             /*!< Status of transaction */
-	register8_t result;                             /*!< Result of transaction */
+	TWI_t *interface;         /*!< Pointer to what interface to use */
+	uint8_t const *writeData; /*!< Data to write */
+	uint8_t *readData;        /*!< Read data */
+	uint8_t address;      /*!< Slave address */
+	uint8_t bytesToWrite; /*!< Number of bytes to write */
+	uint8_t bytesToRead;  /*!< Number of bytes to read */
+	uint8_t bytesWritten; /*!< Number of bytes written */
+	uint8_t bytesRead;    /*!< Number of bytes read */
+	uint8_t status;       /*!< Status of transaction */
+	uint8_t result;       /*!< Result of transaction */
 }TWI_Master_t;
-
-
 
 void TWI_MasterInit(TWI_Master_t *twi,
                     TWI_t *module,
                     TWI_MASTER_INTLVL_t intLevel,
                     uint8_t baudRateRegisterSetting);
+
 TWI_MASTER_BUSSTATE_t TWI_MasterState(TWI_Master_t *twi);
+
 bool TWI_MasterReady(TWI_Master_t *twi);
+
+void TWI_MasterForceIdle(TWI_Master_t *twi);
+
 bool TWI_MasterWrite(TWI_Master_t *twi,
                      uint8_t address,
-                     uint8_t * writeData,
+                     uint8_t const * writeData,
                      uint8_t bytesToWrite);
+
 bool TWI_MasterRead(TWI_Master_t *twi,
                     uint8_t address,
+		    uint8_t * readData,
                     uint8_t bytesToRead);
+
 bool TWI_MasterWriteRead(TWI_Master_t *twi,
                          uint8_t address,
-                         uint8_t *writeData,
+                         uint8_t const *writeData,
                          uint8_t bytesToWrite,
+			 uint8_t *readData,
                          uint8_t bytesToRead);
+
 void TWI_MasterInterruptHandler(TWI_Master_t *twi);
-void TWI_MasterArbitrationLostBusErrorHandler(TWI_Master_t *twi);
-void TWI_MasterWriteHandler(TWI_Master_t *twi);
-void TWI_MasterReadHandler(TWI_Master_t *twi);
-void TWI_MasterTransactionFinished(TWI_Master_t *twi, uint8_t result);
 
 
 /*! TWI master interrupt service routine.

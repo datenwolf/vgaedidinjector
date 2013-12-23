@@ -87,6 +87,7 @@
  *        multiple of 1000000UL (1 MHz).
  */
 #define delay_us( us )   ( __delay_cycles( ( F_CPU / 1000000UL ) * ( us ) ) )
+#define delay_ms( ms )   ( __delay_cycles( ( F_CPU / 100000000000L ) * ( ms ) ) )
 
 /*! \brief Preprocessor magic.
  *
@@ -133,6 +134,7 @@
 
 /*! \brief Define the delay_us macro for GCC. */
 #define delay_us( us )   (_delay_us( us ))
+#define delay_ms( ms )   (_delay_ms( ms ))
 
 #define INLINE static inline
 

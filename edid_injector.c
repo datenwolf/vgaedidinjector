@@ -44,7 +44,7 @@
 #define BAUDRATE	100000
 #define TWI_BAUDSETTING TWI_BAUD(F_CPU, BAUDRATE)
 
-#define EDID_SLAVE_ADDRESS 0xA0
+#define EDID_SLAVE_ADDRESS 0x50
 
 /* TWIC is on the display side */
 TWI_t * const twiDisplay = &TWIC;
@@ -65,23 +65,39 @@ ISR(TWIE_TWIS_vect)
 	TWI_SlaveInterruptHandler(&twisHost);
 }
 
+#define EDID_BLOCK_LENGTH 128
 
-void TWIC_SlaveProcessData(void)
+static uint8_t edid_data[EDID_BLOCK_LENGTH];
+static uint8_t edid_offset;
+static uint8_t recvbuf[1];
+
+void TWIC_SlaveProcessData(TWI_Slave_t * const twi)
 {
+	if( twi->bytesReceived ) {
+		edid_offset = twi->recvData[0];
+	}
+	twi->sendData = edid_data + edid_offset;
+	twi->bytesToSend = sizeof(edid_data) - edid_offset;
 }
 
 void edid_initHostTWI(void)
 {
 	/* Initialize TWI slave. */
-	TWI_SlaveInitializeDriver(&twisHost, twiHost, TWIC_SlaveProcessData);
+	TWI_SlaveInitializeDriver(&twisHost,
+		twiHost,
+		TWIC_SlaveProcessData);
+
 	TWI_SlaveInitializeModule(&twisHost,
 		EDID_SLAVE_ADDRESS,
-		TWI_SLAVE_INTLVL_MED_gc );
+		TWI_SLAVE_INTLVL_HI_gc,
+		recvbuf,
+		sizeof(recvbuf) );
 }
 
 void edid_initDisplayTWI(void)
 {
 	/* Initialize TWI master. */
+	twimDisplay.status = TWIM_STATUS_READY;
 	TWI_MasterInit(&twimDisplay,
 	               twiDisplay,
 	               TWI_MASTER_INTLVL_LO_gc,
@@ -99,52 +115,128 @@ void edid_initDisplayTWI(void)
 
 }
 
+uint8_t edid_checkData(uint8_t const *ediddata)
+{
+	uint8_t checksum = 0;
+	for(uint8_t i = 0; i < EDID_BLOCK_LENGTH; i++) {
+		checksum += ediddata[i];
+	}
+	if( 0 != checksum ) {
+		return 1; /* checksum failed */
+	}
+
+	if( 0 != ediddata[0] ) {
+		return 2; /* headerbyte[0] != 0 */
+	}
+
+	for(uint8_t i = 1; i < 7; i++) {
+		if( 0xff != ediddata[i] ) {
+			return 3; /* headerbyte[1..6] != 0xff */
+		}
+	}
+
+	if( 0 != ediddata[7] ) {
+		return 4; /* headerbyte[7] != 0 */
+	}
+
+	return 0; /* EDID data passed checks */
+}
+
 uint8_t edid_genChecksum(uint8_t *ediddata)
 {
 	uint8_t bytessum = 0;
-	for(size_t i = 0; i < 127; i++) {
+	for(uint8_t i = 0; i < EDID_BLOCK_LENGTH-1; i++) {
 		bytessum += ediddata[i];
 	}
 
-	return 0xff - bytessum;
+	return 0xff - bytessum + 1;
 }
 
-void edid_readFromDisplayToEEPROM(void)
+uint8_t edid_readFromDisplayToEEPROM(void)
 {
-	uint8_t displayedid[128];
-	memset(displayedid, 0, sizeof(displayedid));
+	uint8_t const offset[1] = {0x00};
+	uint8_t displayedid[EDID_BLOCK_LENGTH];
 
-	/* read 128 EDID bytes from display */
+	uint8_t error = 0;
+	uint8_t retry = 20;
+	while( retry-- ) {
+		TWI_MasterForceIdle(&twimDisplay);
+		delay_ms(1);
+
+		/* set EDID offset to 0 */
+		if( !TWI_MasterWriteRead(&twimDisplay,
+			EDID_SLAVE_ADDRESS,
+			offset,
+			sizeof(offset),
+			displayedid,
+			sizeof(displayedid) ) ) {
+			PORTB.OUTCLR = (1<<3);
+			PORTB.OUTSET = (1<<3);
+		};
+
+		while( !TWI_MasterReady(&twimDisplay) ) {
+			delay_ms(1);
+		}
+		delay_ms(1);
+
+		if( twimDisplay.result != TWIM_RESULT_OK ) {
+			error = 1;
+			continue;
+		}
+
+		if( edid_checkData(displayedid) ) {
+			error = 2;
+			continue;
+		}
+
+		break;
+	}
+	if( !retry ) {
+		return error;
+	}
 
 	/* set EDID Extension Block count / flags to zero */
+	displayedid[126] = 0;
 
 	/* recalculate checksum */
 	displayedid[127] = edid_genChecksum(displayedid);
 
 	/* write EDID information to EEPROM */
+	memcpy(edid_data, displayedid, EDID_BLOCK_LENGTH);
+
+	return 0;
 }
 
 int main(void)
 {
-	edid_initHostTWI();
+	memset(edid_data, 0, sizeof(edid_data));
 
+	PORTB.DIR = (1<<3);
+	PORTE.DIR = (1<<2) | (1<<3);
+
+	edid_initHostTWI();
 	edid_initDisplayTWI();
 
-
+	/* Enable LO interrupt level. */
+	PMIC.CTRL |=
+		  PMIC_LOLVLEN_bm
+		| PMIC_MEDLVLEN_bm
+		| PMIC_HILVLEN_bm;
 	sei();
 
+	delay_ms(20); 
 
-	#if 0
-		TWI_MasterWriteRead(&twiMaster,
-		                    SLAVE_ADDRESS,
-		                    &sendBuffer[BufPos],
-		                    1,
-		                    1);
-
-
-		while (twiMaster.status != TWIM_STATUS_READY) {
-			/* Wait until transaction is complete. */
-		}
+	#if 1
+	/* EDID standard requires a host to wait for 20ms after switching +5V
+	 * supply to display before performing the first readout attempt.
+	 * Since uC supply == display +5V supply we're waiting 20ms here.
+	 */
+	for(;;) {
+		edid_readFromDisplayToEEPROM();
+		delay_ms(1000); 
+	}
 	#endif
+
+	return 0;
 }
 
