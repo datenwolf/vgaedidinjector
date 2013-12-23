@@ -216,16 +216,70 @@ uint8_t edid_readFromDisplay(void)
 
 uint8_t edid_readFromEEPROM(void)
 {
-	EEPROM_WaitForNVM(),
+	uint8_t eepromedid[EDID_BLOCK_LENGTH];
+	memset(eepromedid, 0, sizeof(EDID_BLOCK_LENGTH));
+
+	EEPROM_WaitForNVM();
 	EEPROM_FlushBuffer();
 	EEPROM_DisableMapping();
 
+	for(uint8_t i_page = 0;
+	    i_page < EDID_BLOCK_LENGTH / EEPROM_PAGE_SIZE;
+	    i_page++ ) {
+		for(uint8_t i_b = 0; i_b < EEPROM_PAGE_SIZE; i_b++) {
+			eepromedid[i_page * EEPROM_PAGE_SIZE + i_b] =
+				EEPROM_ReadByte(i_page, i_b);
+		}
+	}
 
+	if( edid_checkData(eepromedid) ) {
+		/* EDID data read from EEPROM didn't pass sanity checks */
+		// memset(edid_data, 0, EDID_BLOCK_LENGTH);
+		return 1;
+	}
+
+	memcpy(edid_data, eepromedid, EDID_BLOCK_LENGTH);
+	return 0;
+}
+
+void edid_writeToEEPROM(void)
+{
+	uint8_t pagebuf[EEPROM_PAGE_SIZE];
+
+	EEPROM_WaitForNVM();
+	EEPROM_FlushBuffer();
+	EEPROM_DisableMapping();
+
+	for(uint8_t i_page = 0;
+	    i_page < EDID_BLOCK_LENGTH / EEPROM_PAGE_SIZE;
+	    i_page++ ) {
+		for(uint8_t i_b = 0; i_b < EEPROM_PAGE_SIZE; i_b++) {
+			pagebuf[i_b] = EEPROM_ReadByte(i_page, i_b);
+		}
+
+		if( 0 == memcmp(pagebuf,
+		                edid_data + i_page*EEPROM_PAGE_SIZE,
+		                EEPROM_PAGE_SIZE )
+		) {
+			/* page unaltered skip writing it */
+			continue;
+		}
+
+		memcpy(	pagebuf,
+			edid_data + i_page*EEPROM_PAGE_SIZE,
+			sizeof(pagebuf) );
+
+		EEPROM_LoadPage( pagebuf );
+		EEPROM_AtomicWritePage(i_page);
+		EEPROM_WaitForNVM();
+	}
 }
 
 int main(void)
 {
 	memset(edid_data, 0, sizeof(edid_data));
+
+	edid_readFromEEPROM();
 
 	edid_initHostTWI();
 	edid_initDisplayTWI();
@@ -239,16 +293,17 @@ int main(void)
 
 	delay_ms(20); 
 
-	#if 1
 	/* EDID standard requires a host to wait for 20ms after switching +5V
 	 * supply to display before performing the first readout attempt.
 	 * Since uC supply == display +5V supply we're waiting 20ms here.
 	 */
 	for(;;) {
-		edid_readFromDisplay();
+		if( 0 == edid_readFromDisplay() ) {
+			edid_writeToEEPROM();
+			edid_readFromEEPROM();
+		}
 		delay_ms(1000); 
 	}
-	#endif
 
 	return 0;
 }
