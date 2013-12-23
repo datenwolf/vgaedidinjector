@@ -126,11 +126,6 @@ void TWI_SlaveInitializeModule(TWI_Slave_t *twi,
  */
 void TWI_SlaveInterruptHandler(TWI_Slave_t *twi)
 {
-#if 1
-	PORTE.OUTSET = (1<<2);
-	PORTE.OUTCLR = (1<<2);
-#endif
-
 	uint8_t const currentStatus = twi->interface->SLAVE.STATUS;
 
 	/* If bus error. */

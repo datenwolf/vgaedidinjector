@@ -281,19 +281,11 @@ bool TWI_MasterWriteRead(TWI_Master_t *twi,
  */
 void TWI_MasterInterruptHandler(TWI_Master_t *twi)
 {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 	uint8_t const currentStatus = twi->interface->MASTER.STATUS;
 
 	/* If arbitration lost or bus error. */
 	if ((currentStatus & TWI_MASTER_ARBLOST_bm) ||
 	    (currentStatus & TWI_MASTER_BUSERR_bm)) {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 
 		TWI_MasterArbitrationLostBusErrorHandler(twi);
 		twi->interface->MASTER.STATUS =
@@ -303,10 +295,6 @@ void TWI_MasterInterruptHandler(TWI_Master_t *twi)
 	} else
 	/* If master write interrupt. */
 	if (currentStatus & TWI_MASTER_WIF_bm) {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		TWI_MasterWriteHandler(twi);
 
 		twi->interface->MASTER.STATUS =
@@ -315,10 +303,6 @@ void TWI_MasterInterruptHandler(TWI_Master_t *twi)
 	} else
 	/* If master read interrupt. */
 	if (currentStatus & TWI_MASTER_RIF_bm) {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		TWI_MasterReadHandler(twi);
 
 		twi->interface->MASTER.STATUS =
@@ -332,10 +316,6 @@ void TWI_MasterInterruptHandler(TWI_Master_t *twi)
 	}
 	/* If unexpected state. */
 	else {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		TWI_MasterTransactionFinished(twi, TWIM_RESULT_FAIL);
 
 		twi->interface->MASTER.STATUS = currentStatus;
@@ -380,20 +360,12 @@ static void TWI_MasterWriteHandler(TWI_Master_t *twi)
 
 	/* If NOT acknowledged (NACK) by slave cancel the transaction. */
 	if( twi->interface->MASTER.STATUS & TWI_MASTER_RXACK_bm ) {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		twi->interface->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
 		twi->result = TWIM_RESULT_NACK_RECEIVED;
 		twi->status = TWIM_STATUS_READY;
 	} else
 	/* If more bytes to write, send data. */
 	if( twi->bytesWritten < bytesToWrite ) {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		uint8_t const data = twi->writeData[twi->bytesWritten];
 		twi->interface->MASTER.DATA = data;
 		twi->bytesWritten++;
@@ -402,19 +374,11 @@ static void TWI_MasterWriteHandler(TWI_Master_t *twi)
 	 * 'R/_W = 1'
 	 */
 	if( twi->bytesRead < bytesToRead ) {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		uint8_t const readAddress = twi->address | 0x01;
 		twi->interface->MASTER.ADDR = readAddress;
 	}
 	/* If transaction finished, send STOP condition and set RESULT OK. */
 	else {
-#if 0
-	PORTB.OUTSET = (1<<3);
-	PORTB.OUTCLR = (1<<3);
-#endif
 		twi->interface->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
 		TWI_MasterTransactionFinished(twi, TWIM_RESULT_OK);
 	}
@@ -430,10 +394,6 @@ static void TWI_MasterWriteHandler(TWI_Master_t *twi)
  */
 static void TWI_MasterReadHandler(TWI_Master_t *twi)
 {
-#if 1
-	PORTB.OUTTGL = (1<<3);
-	PORTB.OUTTGL = (1<<3);
-#endif
 
 	/* Local variable used in if test to avoid compiler warning. */
 	uint8_t const bytesToRead = twi->bytesToRead;
