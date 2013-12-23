@@ -152,14 +152,17 @@ uint8_t edid_genChecksum(uint8_t *ediddata)
 	return 0xff - bytessum + 1;
 }
 
-uint8_t edid_readFromDisplayToEEPROM(void)
+uint8_t edid_readFromDisplay(void)
 {
 	uint8_t const offset[1] = {0x00};
 	uint8_t displayedid[EDID_BLOCK_LENGTH];
+	memset(displayedid, 0, sizeof(displayedid));
 
 	uint8_t error = 0;
 	uint8_t retry = 20;
 	while( retry-- ) {
+		error = 0;
+
 		TWI_MasterForceIdle(&twimDisplay);
 		delay_ms(1);
 
@@ -191,8 +194,12 @@ uint8_t edid_readFromDisplayToEEPROM(void)
 
 		break;
 	}
-	if( !retry ) {
+	if( error ) {
 		return error;
+	}
+
+	if( edid_checkData(displayedid) ) {
+		return 3;
 	}
 
 	/* set EDID Extension Block count / flags to zero */
@@ -207,12 +214,18 @@ uint8_t edid_readFromDisplayToEEPROM(void)
 	return 0;
 }
 
+uint8_t edid_readFromEEPROM(void)
+{
+	EEPROM_WaitForNVM(),
+	EEPROM_FlushBuffer();
+	EEPROM_DisableMapping();
+
+
+}
+
 int main(void)
 {
 	memset(edid_data, 0, sizeof(edid_data));
-
-	PORTB.DIR = (1<<3);
-	PORTE.DIR = (1<<2) | (1<<3);
 
 	edid_initHostTWI();
 	edid_initDisplayTWI();
@@ -232,7 +245,7 @@ int main(void)
 	 * Since uC supply == display +5V supply we're waiting 20ms here.
 	 */
 	for(;;) {
-		edid_readFromDisplayToEEPROM();
+		edid_readFromDisplay();
 		delay_ms(1000); 
 	}
 	#endif
