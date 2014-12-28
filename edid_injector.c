@@ -289,8 +289,12 @@ int main(void)
 		  PMIC_LOLVLEN_bm
 		| PMIC_MEDLVLEN_bm
 		| PMIC_HILVLEN_bm;
-	sei();
+	
+	PORTC_PIN2CTRL = PORT_OPC_WIREDANDPULL_gc;
+	PORTC_DIRCLR   = _BV(2);
+	PORTC_OUTSET   = _BV(2);
 
+	sei();
 	delay_ms(20); 
 
 	/* EDID standard requires a host to wait for 20ms after switching +5V
@@ -298,9 +302,12 @@ int main(void)
 	 * Since uC supply == display +5V supply we're waiting 20ms here.
 	 */
 	for(;;) {
-		if( 0 == edid_readFromDisplay() ) {
-			edid_writeToEEPROM();
-			edid_readFromEEPROM();
+		/* Only read a new EDID setting if PC2 is pulled low */
+		if( !(PORTC_IN & _BV(2)) ) {
+			if( 0 == edid_readFromDisplay() ) {
+				edid_writeToEEPROM();
+				edid_readFromEEPROM();
+			}
 		}
 		delay_ms(1000); 
 	}
